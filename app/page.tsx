@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
@@ -13,6 +14,8 @@ import ReactFlow, {
   OnNodesChange,
   OnEdgesChange,
   Panel,
+  Node,
+  ReactFlowInstance,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -21,8 +24,9 @@ import CustomNode from "@/components/CustomNode";
 import NodeConfigPanel from "@/components/NodeConfigPanel";
 import { useWorkflowStore } from "@/lib/store";
 import { nodeDefinitions } from "@/lib/node-definitions";
-import { WorkflowNode, NodeData } from "@/lib/types";
+import { WorkflowNode, NodeData, WorkflowEdge } from "@/lib/types";
 import { WorkflowExecutor } from "@/lib/executor";
+import { X, Lightbulb } from "lucide-react";
 
 const nodeTypes: NodeTypes = {
   custom: CustomNode,
@@ -33,22 +37,31 @@ let nodeIdCounter = 0;
 export default function Home() {
   const { nodes, edges, addNode, addEdge, updateNode, setNodes, setEdges } =
     useWorkflowStore();
-  const [, , onNodesChange] = useNodesState([]);
-  const [, , onEdgesChange] = useEdgesState([]);
+  const [, , onNodesChange] = useNodesState<Node<NodeData>>([]);
+  const [, , onEdgesChange] = useEdgesState<WorkflowEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showTip, setShowTip] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance | null>(null);
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
-      const edge = {
-        ...connection,
+      if (!connection.source || !connection.target) {
+        return;
+      }
+      const edge: WorkflowEdge = {
         id: `e${connection.source}-${connection.target}`,
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: connection.sourceHandle ?? undefined,
+        targetHandle: connection.targetHandle ?? undefined,
         type: "smoothstep",
-        animated: true,
+        style: { stroke: "#7a7a7a", strokeWidth: 1.5 },
       };
-      addEdge(edge as any);
+      addEdge(edge);
     },
     [addEdge]
   );
@@ -86,7 +99,7 @@ export default function Home() {
         }
       });
     },
-    [edges, onEdgesChange, setEdges]
+    [onEdgesChange, setEdges]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -125,8 +138,46 @@ export default function Home() {
     [reactFlowInstance, addNode]
   );
 
+  const handleQuickAddNode = useCallback(
+    (nodeType: string) => {
+      const definition = nodeDefinitions[nodeType];
+      if (!definition) return;
+
+      let position = { x: 0, y: 0 };
+
+      if (reactFlowInstance && reactFlowWrapper.current) {
+        const bounds = reactFlowWrapper.current.getBoundingClientRect();
+        const centerPoint = {
+          x: bounds.left + bounds.width / 2,
+          y: bounds.top + bounds.height / 2,
+        };
+        const flowPosition = reactFlowInstance.screenToFlowPosition(centerPoint);
+        position = {
+          x: flowPosition.x + nodes.length * 24,
+          y: flowPosition.y + nodes.length * 24,
+        };
+      } else {
+        position = { x: nodes.length * 40, y: nodes.length * 40 };
+      }
+
+      const newNode: WorkflowNode = {
+        id: `node-${nodeIdCounter++}`,
+        type: "custom",
+        position,
+        data: {
+          label: definition.label,
+          type: definition.type,
+          config: { ...definition.defaultConfig, type: definition.type },
+        } as NodeData,
+      };
+
+      addNode(newNode);
+    },
+    [addNode, nodes.length, reactFlowInstance]
+  );
+
   const onNodeDoubleClick = useCallback(
-    (_event: React.MouseEvent, node: any) => {
+    (_event: React.MouseEvent, node: Node<NodeData>) => {
       setSelectedNodeId(node.id);
     },
     []
@@ -163,9 +214,12 @@ export default function Home() {
 
     // Execute nodes in order
     const executedNodes = new Set<string>();
-    const nodeOutputs: Record<string, any> = {};
+    const nodeOutputs: Record<string, unknown> = {};
 
-    const executeNodeChain = async (nodeId: string, input: any = null) => {
+    const executeNodeChain = async (
+      nodeId: string,
+      input: unknown = null
+    ): Promise<void> => {
       if (executedNodes.has(nodeId)) return;
 
       const node = nodes.find((n) => n.id === nodeId);
@@ -175,10 +229,11 @@ export default function Home() {
       updateNode(nodeId, { isExecuting: true, error: undefined });
 
       try {
+        const nodeConfig = node.data.config ?? {};
         const result = await executor.executeNode({
           nodeId: node.id,
           input,
-          config: node.data.config || {},
+          config: nodeConfig,
           previousNodes: nodeOutputs,
         });
 
@@ -200,9 +255,11 @@ export default function Home() {
             isExecuting: false,
           });
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "Execution failed";
         updateNode(nodeId, {
-          error: error.message || "Execution failed",
+          error: message,
           isExecuting: false,
         });
       }
@@ -217,8 +274,14 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-gray-100 dark:bg-gray-950">
-      <Sidebar onExecute={executeWorkflow} isExecuting={isExecuting} />
+    <div className="flex h-screen w-screen bg-white">
+      <Sidebar
+        onExecute={executeWorkflow}
+        isExecuting={isExecuting}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((prev) => !prev)}
+        onQuickAdd={handleQuickAddNode}
+      />
 
       <div className="flex-1" ref={reactFlowWrapper}>
         <ReactFlow
@@ -233,9 +296,15 @@ export default function Home() {
           onNodeDoubleClick={onNodeDoubleClick}
           nodeTypes={nodeTypes}
           fitView
-          className="bg-gray-50 dark:bg-gray-900"
+          proOptions={{ hideAttribution: true }}
+          className="bg-[#f7f7f8]"
         >
-          <Background color="#aaa" gap={16} />
+          <Background
+            variant={BackgroundVariant.Dots}
+            color="#6b6b6b"
+            size={1.3}
+            gap={18}
+          />
           <Controls />
           <MiniMap
             nodeColor={(node) => {
@@ -244,24 +313,44 @@ export default function Home() {
                 ? "#8b5cf6"
                 : definition?.color.replace("bg-", "") || "#6366f1";
             }}
-            className="bg-white dark:bg-gray-800"
+            className="bg-white"
           />
 
           <Panel
             position="top-center"
-            className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
+            className="rounded-sm border border-[#e0e0e0] bg-white px-4 py-2 text-sm text-[#545454] shadow-sm"
           >
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {nodes.length}
-              </span>{" "}
-              nodes •{" "}
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {edges.length}
-              </span>{" "}
-              connections
+            <div>
+              <span className="font-medium text-[#2d2d2d]">{nodes.length}</span> nodes •{' '}
+              <span className="font-medium text-[#2d2d2d]">{edges.length}</span> connections
             </div>
           </Panel>
+
+          {showTip && (
+            <Panel
+              position="top-right"
+              className="w-60 rounded-sm border border-[#f2c7d3] bg-[#fff5f8] px-3 py-2 text-xs text-[#b12a4f] shadow-sm"
+            >
+              <div className="relative pr-5">
+                <div className="flex items-center gap-2 text-[#e1325e]">
+                  <Lightbulb className="h-3.5 w-3.5" />
+                  <span className="text-[0.75rem] font-semibold">Quick tips</span>
+                </div>
+                <div className="mt-2 space-y-1">
+                  <p>Drag nodes to build and double-click to drop instantly.</p>
+                  <p>Connect the flow, then execute when you’re ready.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTip(false)}
+                  aria-label="Dismiss tips"
+                  className="absolute right-0 top-0 text-[#e1325e] transition-colors hover:text-[#b12a4f]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </Panel>
+          )}
         </ReactFlow>
       </div>
 

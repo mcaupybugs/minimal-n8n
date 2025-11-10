@@ -1,44 +1,50 @@
 import { NodeExecutionContext, NodeExecutionResult } from "./types";
 import { nodeDefinitions } from "./node-definitions";
 
-// Helper function to replace template variables like {{input}} or {{input.fieldName}}
-function replaceTemplateVariables(text: string, input: any): string {
-  if (typeof text !== "string") return text;
-
-  return text.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+function replaceTemplateVariables(text: string, input: unknown): string {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match: string, path: string) => {
     const trimmedPath = path.trim();
 
-    // Handle {{input}} - return entire input
     if (trimmedPath === "input") {
-      return typeof input === "object" ? JSON.stringify(input) : String(input);
+      if (typeof input === "object" && input !== null) {
+        return JSON.stringify(input);
+      }
+      return input === undefined ? "" : String(input);
     }
 
-    // Handle {{input.fieldName}} - access nested properties
     if (trimmedPath.startsWith("input.")) {
       const fields = trimmedPath.substring(6).split(".");
-      let result = input;
+      let result: unknown = input;
 
       for (const field of fields) {
-        if (result && typeof result === "object") {
-          result = result[field];
+        if (
+          result &&
+          typeof result === "object" &&
+          field in (result as Record<string, unknown>)
+        ) {
+          result = (result as Record<string, unknown>)[field];
         } else {
-          return match; // Return original if path is invalid
+          return match;
         }
       }
 
-      return result !== undefined && result !== null ? String(result) : match;
+      if (result === undefined || result === null) {
+        return match;
+      }
+
+      return typeof result === "object" ? JSON.stringify(result) : String(result);
     }
 
-    return match; // Return original if pattern doesn't match
+    return match;
   });
 }
 
 export class WorkflowExecutor {
   private async executeAINode(
     type: string,
-    config: Record<string, any>,
-    input: any
-  ): Promise<any> {
+    config: Record<string, unknown>,
+    input: unknown
+  ): Promise<unknown> {
     try {
       const response = await fetch("/api/ai/execute", {
         method: "POST",
@@ -52,8 +58,10 @@ export class WorkflowExecutor {
       }
 
       return await response.json();
-    } catch (error: any) {
-      throw new Error(error.message || "Failed to execute AI node");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to execute AI node";
+      throw new Error(message);
     }
   }
 
@@ -61,12 +69,21 @@ export class WorkflowExecutor {
     context: NodeExecutionContext
   ): Promise<NodeExecutionResult> {
     const { nodeId, input, config } = context;
-    const definition = nodeDefinitions[config.type];
+    const type = config.type;
+
+    if (typeof type !== "string") {
+      return {
+        success: false,
+        error: `Node ${nodeId} is missing a valid type`,
+      };
+    }
+
+    const definition = nodeDefinitions[type];
 
     if (!definition) {
       return {
         success: false,
-        error: `Unknown node type: ${config.type}`,
+        error: `Unknown node type: ${type}`,
       };
     }
 
@@ -90,33 +107,33 @@ export class WorkflowExecutor {
             error: `Unsupported node category: ${definition.category}`,
           };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || "Execution failed",
+        error: error instanceof Error ? error.message : "Execution failed",
       };
     }
   }
 
   private async executeTriggerNode(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
-    // Trigger nodes pass through their input or generate initial data
     return {
       success: true,
       output: input || {
         triggeredAt: new Date().toISOString(),
-        config: config,
+        config,
       },
     };
   }
 
   private async executeAINodeType(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
-    const result = await this.executeAINode(config.type, config, input);
+    const type = typeof config.type === "string" ? config.type : "";
+    const result = await this.executeAINode(type, config, input);
     return {
       success: true,
       output: result,
@@ -124,10 +141,12 @@ export class WorkflowExecutor {
   }
 
   private async executeActionNode(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
-    switch (config.type) {
+    const type = typeof config.type === "string" ? config.type : "";
+
+    switch (type) {
       case "httpRequest":
         return await this.executeHttpRequest(config, input);
 
@@ -140,24 +159,26 @@ export class WorkflowExecutor {
       default:
         return {
           success: false,
-          error: `Unknown action node type: ${config.type}`,
+          error: `Unknown action node type: ${type}`,
         };
     }
   }
 
   private async executeHttpRequest(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
     try {
-      let { method = "GET", url, headers = "{}", body = "{}" } = config;
+      const method = typeof config.method === "string" ? config.method : "GET";
+      const rawUrl = typeof config.url === "string" ? config.url : "";
+      const rawHeaders =
+        typeof config.headers === "string" ? config.headers : "{}";
+      const rawBody = typeof config.body === "string" ? config.body : "{}";
 
-      // Process template variables
-      url = replaceTemplateVariables(url, input);
-      headers = replaceTemplateVariables(headers, input);
-      body = replaceTemplateVariables(body, input);
+      const url = replaceTemplateVariables(rawUrl, input);
+      const headers = replaceTemplateVariables(rawHeaders, input);
+      const body = replaceTemplateVariables(rawBody, input);
 
-      // Validate URL
       if (!url || typeof url !== "string") {
         return {
           success: false,
@@ -165,7 +186,6 @@ export class WorkflowExecutor {
         };
       }
 
-      // Make request through our API to avoid CORS issues
       const response = await fetch("/api/http-proxy", {
         method: "POST",
         headers: {
@@ -192,22 +212,22 @@ export class WorkflowExecutor {
         success: true,
         output: result,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || "HTTP request failed",
+        error:
+          error instanceof Error ? error.message : "HTTP request failed",
       };
     }
   }
 
   private executeDataTransform(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): NodeExecutionResult {
     try {
-      const { code } = config;
+      const code = typeof config.code === "string" ? config.code : "";
 
-      // Create a safe function from the code
       const transformFunction = new Function("input", code);
       const output = transformFunction(input);
 
@@ -215,25 +235,28 @@ export class WorkflowExecutor {
         success: true,
         output,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || "Data transformation failed",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Data transformation failed",
       };
     }
   }
 
   private executeSendEmail(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): NodeExecutionResult {
-    // Simulated email sending
-    let { to, subject, body } = config;
+  const rawTo = typeof config.to === "string" ? config.to : "";
+  const rawSubject = typeof config.subject === "string" ? config.subject : "";
+  const rawBody = typeof config.body === "string" ? config.body : "";
 
-    // Process template variables
-    to = replaceTemplateVariables(to, input);
-    subject = replaceTemplateVariables(subject, input);
-    body = replaceTemplateVariables(body, input);
+  const to = replaceTemplateVariables(rawTo, input);
+  const subject = replaceTemplateVariables(rawSubject, input);
+  const body = replaceTemplateVariables(rawBody, input);
 
     return {
       success: true,
@@ -249,10 +272,12 @@ export class WorkflowExecutor {
   }
 
   private async executeLogicNode(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
-    switch (config.type) {
+    const type = typeof config.type === "string" ? config.type : "";
+
+    switch (type) {
       case "ifElse":
         return this.executeIfElse(config, input);
 
@@ -262,23 +287,26 @@ export class WorkflowExecutor {
       default:
         return {
           success: false,
-          error: `Unknown logic node type: ${config.type}`,
+          error: `Unknown logic node type: ${type}`,
         };
     }
   }
 
   private executeIfElse(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): NodeExecutionResult {
     try {
-      const { condition, operator } = config;
+      const condition =
+        typeof config.condition === "string" ? config.condition : "";
+      const operator =
+        typeof config.operator === "string" ? config.operator : "javascript";
 
       let result = false;
 
-      if (operator === "javascript") {
+      if (operator === "javascript" && condition) {
         const evaluateFunction = new Function("input", `return ${condition}`);
-        result = evaluateFunction(input);
+        result = Boolean(evaluateFunction(input));
       }
 
       return {
@@ -289,21 +317,30 @@ export class WorkflowExecutor {
           input,
         },
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || "Condition evaluation failed",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Condition evaluation failed",
       };
     }
   }
 
   private async executeDelay(
-    config: Record<string, any>,
-    input: any
+    config: Record<string, unknown>,
+    input: unknown
   ): Promise<NodeExecutionResult> {
-    const { duration, unit } = config;
-    const ms =
-      unit === "seconds" ? parseInt(duration) * 1000 : parseInt(duration);
+    const durationRaw =
+      typeof config.duration === "string" ? config.duration : "0";
+    const unit = typeof config.unit === "string" ? config.unit : "milliseconds";
+    const parsedDuration = Number.parseInt(durationRaw, 10);
+    const ms = Number.isNaN(parsedDuration)
+      ? 0
+      : unit === "seconds"
+        ? parsedDuration * 1000
+        : parsedDuration;
 
     await new Promise((resolve) => setTimeout(resolve, ms));
 

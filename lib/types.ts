@@ -16,17 +16,15 @@ export type NodeType =
 export interface NodeData {
   label: string;
   type: NodeType;
-  config?: Record<string, any>;
-  output?: any;
+  config?: Record<string, unknown>;
+  output?: unknown;
   isExecuting?: boolean;
   error?: string;
 }
 
-export interface WorkflowNode extends Node {
-  data: NodeData;
-}
+export type WorkflowNode = Node<NodeData>;
 
-export interface WorkflowEdge extends Edge {}
+export type WorkflowEdge = Edge;
 
 export interface WorkflowState {
   nodes: WorkflowNode[];
@@ -43,13 +41,13 @@ export interface WorkflowState {
 
 export interface NodeExecutionContext {
   nodeId: string;
-  input: any;
-  config: Record<string, any>;
-  previousNodes: Record<string, any>;
+  input: unknown;
+  config: Record<string, unknown>;
+  previousNodes: Record<string, unknown>;
 }
 
 export interface NodeExecutionResult {
   success: boolean;
-  output?: any;
+  output?: unknown;
   error?: string;
 }

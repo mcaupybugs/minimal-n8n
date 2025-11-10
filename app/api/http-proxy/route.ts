@@ -4,36 +4,31 @@ export async function POST(request: NextRequest) {
   try {
     const { url, method = "GET", headers = "{}", body } = await request.json();
 
-    // Validate URL
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
-    // Ensure URL has a protocol
     let validUrl = url.trim();
     if (!validUrl.startsWith("http://") && !validUrl.startsWith("https://")) {
       validUrl = "https://" + validUrl;
     }
 
-    // Parse headers
     let parsedHeaders: Record<string, string> = {};
     try {
       parsedHeaders = JSON.parse(headers);
-    } catch (e) {
-      // Ignore invalid JSON headers
+    } catch {
+      parsedHeaders = {};
     }
 
-    // Parse body for non-GET requests
-    let parsedBody;
+    let parsedBody: unknown;
     if (method !== "GET" && body) {
       try {
         parsedBody = JSON.parse(body);
-      } catch (e) {
-        parsedBody = body; // Use as-is if not valid JSON
+      } catch {
+        parsedBody = body;
       }
     }
 
-    // Make the actual HTTP request
     const response = await fetch(validUrl, {
       method,
       headers: {
@@ -44,17 +39,14 @@ export async function POST(request: NextRequest) {
       body: parsedBody ? JSON.stringify(parsedBody) : undefined,
     });
 
-    // Get response content type
     const contentType = response.headers.get("content-type");
-    let data;
+    let data: unknown;
 
-    // Handle different content types
     if (contentType?.includes("application/json")) {
       data = await response.json();
     } else if (contentType?.includes("text/")) {
       data = await response.text();
     } else {
-      // For binary or unknown content, convert to text
       data = await response.text();
     }
 
@@ -64,12 +56,17 @@ export async function POST(request: NextRequest) {
       headers: Object.fromEntries(response.headers.entries()),
       data,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("HTTP proxy error:", error);
+    const message = error instanceof Error ? error.message : "HTTP request failed";
+    const details =
+      error instanceof Error && error.cause instanceof Error
+        ? error.cause.message
+        : undefined;
     return NextResponse.json(
       {
-        error: error.message || "HTTP request failed",
-        details: error.cause?.message,
+        error: message,
+        details,
       },
       { status: 500 }
     );

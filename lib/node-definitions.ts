@@ -11,15 +11,16 @@ import {
   GitBranch,
   Timer,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export interface NodeDefinition {
   type: string;
   label: string;
   description: string;
   category: "trigger" | "ai" | "action" | "logic";
-  icon: any;
+  icon: LucideIcon;
   color: string;
-  defaultConfig: Record<string, any>;
+  defaultConfig: Record<string, unknown>;
   configFields: ConfigField[];
 }
 
@@ -30,7 +31,7 @@ export interface ConfigField {
   placeholder?: string;
   options?: { value: string; label: string }[];
   required?: boolean;
-  defaultValue?: any;
+  defaultValue?: unknown;
 }
 
 export const nodeDefinitions: Record<string, NodeDefinition> = {
@@ -40,7 +41,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Triggers workflow when receiving HTTP request",
     category: "trigger",
     icon: Webhook,
-    color: "bg-blue-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       method: "POST",
       path: "/webhook",
@@ -73,7 +74,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Runs workflow on a schedule",
     category: "trigger",
     icon: Clock,
-    color: "bg-purple-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       interval: "5",
       unit: "minutes",
@@ -106,7 +107,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Generate text using Azure OpenAI",
     category: "ai",
     icon: Sparkles,
-    color: "bg-gradient-to-r from-pink-500 to-purple-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       prompt: "Write a professional email",
       temperature: "0.7",
@@ -140,10 +141,10 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
   aiAnalyzer: {
     type: "aiAnalyzer",
     label: "AI Content Analyzer",
-    description: "Analyze content with AI (sentiment, keywords, summary)",
+    description: "Analyze content with Azure OpenAI (sentiment, keywords, summary)",
     category: "ai",
     icon: Brain,
-    color: "bg-gradient-to-r from-cyan-500 to-blue-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       analysisType: "sentiment",
       text: "",
@@ -176,7 +177,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Generate chatbot responses",
     category: "ai",
     icon: MessageSquare,
-    color: "bg-gradient-to-r from-green-500 to-emerald-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       systemPrompt: "You are a helpful assistant.",
       userMessage: "",
@@ -217,7 +218,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Extract structured data from text",
     category: "ai",
     icon: FileSearch,
-    color: "bg-gradient-to-r from-orange-500 to-red-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       text: "",
       schema: '{"name": "string", "email": "string"}',
@@ -246,7 +247,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Make HTTP requests to APIs",
     category: "action",
     icon: Globe,
-    color: "bg-green-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       method: "GET",
       url: "https://api.example.com",
@@ -296,7 +297,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Transform data using JavaScript",
     category: "action",
     icon: Code,
-    color: "bg-yellow-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       code: "return { ...input, transformed: true };",
     },
@@ -317,7 +318,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Send email (simulated)",
     category: "action",
     icon: Mail,
-    color: "bg-red-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       to: "user@example.com",
       subject: "Hello",
@@ -354,7 +355,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Conditional logic",
     category: "logic",
     icon: GitBranch,
-    color: "bg-indigo-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       condition: "input.value > 10",
       operator: "javascript",
@@ -387,7 +388,7 @@ export const nodeDefinitions: Record<string, NodeDefinition> = {
     description: "Wait for specified time",
     category: "logic",
     icon: Timer,
-    color: "bg-gray-500",
+    color: "bg-[#2d2d2d]",
     defaultConfig: {
       duration: "1000",
       unit: "milliseconds",

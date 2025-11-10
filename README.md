@@ -51,7 +51,7 @@ A minimal n8n-like workflow automation tool built with Next.js, React Flow, and 
 1. **Clone the repository**
 
 ```bash
-git clone <your-repo>
+git clone https://github.com/mcaupybugs/minimal-n8n
 cd minimal-n8n
 ```
 

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { WorkflowState, WorkflowNode, WorkflowEdge } from "./types";
 import { addEdge as addReactFlowEdge, Connection } from "reactflow";
 
-export const useWorkflowStore = create<WorkflowState>((set, get) => ({
+export const useWorkflowStore = create<WorkflowState>((set) => ({
   nodes: [],
   edges: [],
 

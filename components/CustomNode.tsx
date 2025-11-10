@@ -4,10 +4,13 @@ import React, { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import { nodeDefinitions } from "@/lib/node-definitions";
 import { WorkflowNode } from "@/lib/types";
-import { Settings, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Settings, CheckCircle, AlertCircle, Loader2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useWorkflowStore } from "@/lib/store";
 
-function CustomNode({ data, id, selected }: NodeProps<WorkflowNode["data"]>) {
+function CustomNode({ data, selected, id }: NodeProps<WorkflowNode["data"]>) {
   const definition = nodeDefinitions[data.type];
+  const deleteNode = useWorkflowStore((state) => state.deleteNode);
 
   if (!definition) return null;
 
@@ -16,29 +19,40 @@ function CustomNode({ data, id, selected }: NodeProps<WorkflowNode["data"]>) {
 
   return (
     <div
-      className={`
-        relative bg-white dark:bg-gray-800 rounded-lg shadow-lg border-2 transition-all
-        ${selected ? "border-blue-500" : "border-gray-200 dark:border-gray-700"}
-        ${data.isExecuting ? "ring-2 ring-blue-400" : ""}
-        ${data.error ? "ring-2 ring-red-400" : ""}
-        min-w-[200px]
-      `}
+      className={cn(
+        "relative min-w-[200px] rounded-sm border border-[#e0e0e0] bg-white shadow-sm transition-all",
+        selected && "border-[var(--accent)]",
+        data.isExecuting && "ring-2 ring-[#2d2d2d]/40",
+        data.error && "ring-2 ring-[var(--accent)]"
+      )}
     >
       {/* Input Handle */}
       {showInput && (
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
+          className="!h-3 !w-3 !border-2 !border-white !bg-[var(--accent)]"
         />
       )}
 
+      <button
+        type="button"
+        aria-label="Remove node"
+        onClick={(event) => {
+          event.stopPropagation();
+          deleteNode(id);
+        }}
+        className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-[#8a8a8a] shadow-sm ring-1 ring-[#d9d9d9] transition-colors hover:text-[var(--accent)] hover:ring-[var(--accent)]"
+      >
+        <X className="h-2.5 w-2.5" strokeWidth={2.5} />
+      </button>
+
       {/* Node Header */}
       <div
-        className={`${definition.color} p-3 rounded-t-lg flex items-center gap-2`}
+        className={`${definition.color} flex items-center gap-2 rounded-t-sm px-3 py-2`}
       >
         <Icon className="h-5 w-5 text-white" />
-        <span className="font-semibold text-white text-sm flex-1">
+        <span className="flex-1 text-sm font-medium text-white">
           {definition.label}
         </span>
 
@@ -53,13 +67,13 @@ function CustomNode({ data, id, selected }: NodeProps<WorkflowNode["data"]>) {
 
       {/* Node Body */}
       <div className="p-3">
-        <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+        <div className="mb-2 text-xs text-[#5a5a5a]">
           {definition.description}
         </div>
 
         {data.config && Object.keys(data.config).length > 0 && (
-          <div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+          <div className="rounded-sm border border-[#e0e0e0] bg-[#f6f6f6] p-2 text-xs text-[#5a5a5a]">
+            <div className="flex items-center gap-1 text-[#4a4a4a]">
               <Settings className="h-3 w-3" />
               <span>Configured</span>
             </div>
@@ -67,13 +81,13 @@ function CustomNode({ data, id, selected }: NodeProps<WorkflowNode["data"]>) {
         )}
 
         {data.error && (
-          <div className="mt-2 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-2 rounded border border-red-200 dark:border-red-800">
+          <div className="mt-2 rounded-sm border border-[#f3b8c6] bg-[#fff0f4] p-2 text-xs text-[var(--accent)]">
             {data.error}
           </div>
         )}
 
         {data.output && !data.error && (
-          <div className="mt-2 text-xs bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 p-2 rounded border border-green-200 dark:border-green-800">
+          <div className="mt-2 rounded-sm border border-[#e0e0e0] bg-[#f6f6f6] p-2 text-xs text-[#2d2d2d]">
             ✓ Executed successfully
           </div>
         )}
@@ -83,7 +97,7 @@ function CustomNode({ data, id, selected }: NodeProps<WorkflowNode["data"]>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white"
+        className="!h-3 !w-3 !border-2 !border-white !bg-[var(--accent)]"
       />
     </div>
   );

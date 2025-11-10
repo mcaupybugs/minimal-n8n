@@ -1,32 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AzureOpenAI } from "openai";
 
-// Helper function to replace template variables
-function replaceTemplateVariables(text: string, input: any): string {
-  if (!text || typeof text !== "string") return text;
+function replaceTemplateVariables(text: unknown, input: unknown): string {
+  if (!text || typeof text !== "string") return String(text ?? "");
 
-  // Replace {{input}} with the whole input
   let result = text.replace(
     /\{\{input\}\}/g,
-    typeof input === "object" ? JSON.stringify(input) : String(input)
+    typeof input === "object" ? JSON.stringify(input) : String(input ?? "")
   );
 
-  // Replace {{input.field}} or {{input.nested.field}} with specific fields
   result = result.replace(
     /\{\{input\.([^}]+)\}\}/g,
     (match: string, path: string) => {
       const fields = path.split(".");
-      let value = input;
+      let value: unknown = input;
 
       for (const field of fields) {
-        if (value && typeof value === "object" && field in value) {
-          value = value[field];
+        if (value && typeof value === "object" && field in (value as Record<string, unknown>)) {
+          value = (value as Record<string, unknown>)[field];
         } else {
-          return match; // Keep original if path doesn't exist
+          return match;
         }
       }
 
-      return typeof value === "object" ? JSON.stringify(value) : String(value);
+      return typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
     }
   );
 
@@ -51,25 +48,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize Azure OpenAI client inside the handler
     const openai = new AzureOpenAI({
       apiKey: process.env.AZURE_OPENAI_API_KEY,
       endpoint: process.env.AZURE_OPENAI_ENDPOINT,
       apiVersion: "2024-08-01-preview",
     });
 
-    const deploymentId = process.env.AZURE_OPENAI_DEPLOYMENT_ID;
+    const deploymentId = process.env.AZURE_OPENAI_DEPLOYMENT_ID as string;
 
-    let result;
+  let result;
 
     switch (type) {
       case "aiTextGenerator":
-        result = await executeTextGenerator(
-          config,
-          input,
-          openai,
-          deploymentId
-        );
+        result = await executeTextGenerator(config, input, openai, deploymentId);
         break;
 
       case "aiAnalyzer":
@@ -81,12 +72,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "aiDataExtractor":
-        result = await executeDataExtractor(
-          config,
-          input,
-          openai,
-          deploymentId
-        );
+        result = await executeDataExtractor(config, input, openai, deploymentId);
         break;
 
       default:
@@ -97,18 +83,17 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("AI execution error:", error);
-    console.error("Error details:", {
-      message: error.message,
-      stack: error.stack,
-      status: error.status,
-      response: error.response,
-    });
+    if (error instanceof Error) {
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+      });
+    }
     return NextResponse.json(
       {
-        error: error.message || "AI execution failed",
-        details: error.status ? `Status: ${error.status}` : undefined,
+        error: error instanceof Error ? error.message : "AI execution failed",
       },
       { status: 500 }
     );
@@ -116,20 +101,15 @@ export async function POST(request: NextRequest) {
 }
 
 async function executeTextGenerator(
-  config: any,
-  input: any,
+  config: Record<string, unknown>,
+  input: unknown,
   openai: AzureOpenAI,
   deploymentId: string
 ) {
-  let { prompt, temperature, maxTokens } = config;
-
-  // Replace template variables in prompt
-  prompt = replaceTemplateVariables(prompt, input);
-
-  console.log("Executing text generator with:", {
-    deploymentId,
-    prompt: prompt?.substring(0, 50),
-  });
+  const configRecord = config as Record<string, unknown>;
+  const prompt = replaceTemplateVariables(configRecord.prompt, input);
+  const temperatureValue = Number(configRecord.temperature ?? 0.7) || 0.7;
+  const maxTokensValue = Number(configRecord.maxTokens ?? 500) || 500;
 
   const completion = await openai.chat.completions.create({
     model: deploymentId,
@@ -139,11 +119,9 @@ async function executeTextGenerator(
         content: prompt,
       },
     ],
-    temperature: parseFloat(temperature || "0.7"),
-    max_tokens: parseInt(maxTokens || "500"),
+    temperature: temperatureValue,
+    max_tokens: maxTokensValue,
   });
-
-  console.log("Text generator completed:", { model: completion.model });
 
   return {
     generatedText: completion.choices[0].message.content,
@@ -153,15 +131,14 @@ async function executeTextGenerator(
 }
 
 async function executeAnalyzer(
-  config: any,
-  input: any,
+  config: Record<string, unknown>,
+  input: unknown,
   openai: AzureOpenAI,
   deploymentId: string
 ) {
-  let { text, analysisType } = config;
-
-  // Process template variables in text
-  text = replaceTemplateVariables(text, input);
+  const configRecord = config as Record<string, unknown>;
+  const text = replaceTemplateVariables(configRecord.text, input);
+  const analysisType = String(configRecord.analysisType ?? "sentiment");
 
   let systemPrompt = "";
   switch (analysisType) {
@@ -196,18 +173,17 @@ async function executeAnalyzer(
 }
 
 async function executeChatbot(
-  config: any,
-  input: any,
+  config: Record<string, unknown>,
+  input: unknown,
   openai: AzureOpenAI,
   deploymentId: string
 ) {
-  let { systemPrompt, userMessage, personality } = config;
+  const configRecord = config as Record<string, unknown>;
+  const systemPrompt = replaceTemplateVariables(configRecord.systemPrompt, input);
+  const userMessage = replaceTemplateVariables(configRecord.userMessage, input);
+  const personality = String(configRecord.personality ?? "professional");
 
-  // Process template variables
-  systemPrompt = replaceTemplateVariables(systemPrompt, input);
-  userMessage = replaceTemplateVariables(userMessage, input);
-
-  const personalityPrompts = {
+  const personalityPrompts: Record<string, string> = {
     professional: "Respond in a professional and formal manner.",
     friendly: "Respond in a warm, friendly, and conversational manner.",
     concise: "Respond with brief, to-the-point answers.",
@@ -234,16 +210,14 @@ async function executeChatbot(
 }
 
 async function executeDataExtractor(
-  config: any,
-  input: any,
+  config: Record<string, unknown>,
+  input: unknown,
   openai: AzureOpenAI,
   deploymentId: string
 ) {
-  let { text, schema } = config;
-
-  // Process template variables
-  text = replaceTemplateVariables(text, input);
-  schema = replaceTemplateVariables(schema, input);
+  const configRecord = config as Record<string, unknown>;
+  const text = replaceTemplateVariables(configRecord.text, input);
+  const schema = replaceTemplateVariables(configRecord.schema, input);
 
   const systemPrompt = `Extract information from the text according to this schema: ${schema}. Return ONLY a valid JSON object matching the schema, with no additional text or explanation.`;
 
@@ -265,9 +239,9 @@ async function executeDataExtractor(
       schema,
       usage: completion.usage,
     };
-  } catch (e) {
+  } catch {
     return {
-      extractedData: extractedData,
+      extractedData,
       schema,
       usage: completion.usage,
       note: "Could not parse as JSON, returning raw text",
